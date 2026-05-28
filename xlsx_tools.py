@@ -106,9 +106,9 @@ def read_xlsx(path: Path) -> list[list[str]]:
     return rows
 
 
-def write_xlsx(path: Path, headers: list[str], rows: Iterable[list[str]]) -> None:
+def write_xlsx(path: Path, header_rows: list[list[str]], rows: Iterable[list[str]]) -> None:
     row_list = list(rows)
-    sheet_xml = _build_sheet_xml([headers, *row_list])
+    sheet_xml = _build_sheet_xml([*header_rows, *row_list])
 
     files = {
         "[Content_Types].xml": _content_types_xml(),

@@ -44,6 +44,7 @@ IMAGE_COLUMN_MAP = {
 }
 IMAGE_FOLDER_NAMES = ["商品主图", "商品详情页图", "商品信息", "颜色图"]
 DATA_CODE_ALIASES = ["资料编码", "商品编码", "编码", "款号", "货号", "code"]
+HEADER_ROW_COUNT = 2
 
 
 def _cleanup_expired_jobs() -> None:
@@ -94,19 +95,20 @@ def _clean_filename(value: str) -> str:
     return value[:80] or "未命名商品"
 
 
-def _parse_workbook(file_path: Path) -> tuple[list[str], list[list[str]]]:
+def _parse_workbook(file_path: Path) -> tuple[list[list[str]], list[str], list[list[str]]]:
     try:
         rows = read_xlsx(file_path)
     except Exception as exc:  # pragma: no cover - surfaced as API error
         raise HTTPException(status_code=400, detail=f"Excel 解析失败：{exc}") from exc
 
-    if not rows:
+    if len(rows) < HEADER_ROW_COUNT:
         raise HTTPException(status_code=400, detail="Excel 内容为空")
-    headers = [str(item).strip() for item in rows[0]]
-    body = rows[1:]
-    if not any(headers):
-        raise HTTPException(status_code=400, detail="第一行需要是表头")
-    return headers, body
+    header_rows = [[str(item).strip() for item in row] for row in rows[:HEADER_ROW_COUNT]]
+    headers = header_rows[-1]
+    body = rows[HEADER_ROW_COUNT:]
+    if not all(any(row) for row in header_rows):
+        raise HTTPException(status_code=400, detail="前两行需要是表头")
+    return header_rows, headers, body
 
 
 def _find_product_column(headers: list[str]) -> int:
@@ -117,7 +119,7 @@ def _find_product_column(headers: list[str]) -> int:
     for index, header in enumerate(headers):
         if "商品" in header and "名称" in header:
             return index
-    raise HTTPException(status_code=400, detail="找不到“商品名称”列，请在 Excel 第一行添加商品名称")
+    raise HTTPException(status_code=400, detail="找不到“商品名称”列，请在 Excel 第二行添加商品名称")
 
 
 def _find_optional_column(headers: list[str], aliases: list[str]) -> int | None:
@@ -136,12 +138,15 @@ def _cell(row: list[str], index: int) -> str:
 def _group_rows(headers: list[str], rows: list[list[str]]) -> dict[str, list[list[str]]]:
     product_index = _find_product_column(headers)
     grouped: dict[str, list[list[str]]] = defaultdict(list)
+    current_name = ""
     for row in rows:
         if not any(str(value).strip() for value in row):
             continue
         name = _cell(row, product_index)
         if name:
-            grouped[name].append(row)
+            current_name = name
+        if current_name:
+            grouped[current_name].append(row)
     return dict(grouped)
 
 
@@ -259,7 +264,7 @@ async def preview(excel: Annotated[UploadFile, File()]) -> dict:
         excel_path = temp_dir / "upload.xlsx"
         with excel_path.open("wb") as output:
             shutil.copyfileobj(excel.file, output)
-        headers, rows = _parse_workbook(excel_path)
+        _, headers, rows = _parse_workbook(excel_path)
         return _preview_payload(headers, rows)
 
 
@@ -282,7 +287,7 @@ async def generate(
     with excel_path.open("wb") as output:
         shutil.copyfileobj(excel.file, output)
 
-    headers, rows = _parse_workbook(excel_path)
+    header_rows, headers, rows = _parse_workbook(excel_path)
     grouped = _group_rows(headers, rows)
     if not grouped:
         raise HTTPException(status_code=400, detail="没有可生成的商品数据")
@@ -294,7 +299,7 @@ async def generate(
         for folder_name in IMAGE_FOLDER_NAMES:
             (product_dir / folder_name).mkdir(exist_ok=True)
         data_code = _data_code(headers, product_rows, index)
-        write_xlsx(product_dir / f"商品数据-{data_code}.xlsx", headers, product_rows)
+        write_xlsx(product_dir / f"商品数据-{data_code}.xlsx", header_rows, product_rows)
 
     manifest = {
         "source_excel": excel.filename,
