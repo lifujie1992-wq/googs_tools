@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import tempfile
+import threading
+import time
 import uuid
 import zipfile
 from collections import defaultdict
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, AsyncIterator
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -21,6 +25,8 @@ BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 WORK_DIR = BASE_DIR / "work"
 WORK_DIR.mkdir(exist_ok=True)
+TASK_TTL_SECONDS = int(os.getenv("TASK_TTL_SECONDS", "7200"))
+CLEANUP_INTERVAL_SECONDS = int(os.getenv("CLEANUP_INTERVAL_SECONDS", "600"))
 
 PRODUCT_NAME_ALIASES = ["商品名称", "商品名", "产品名称", "产品名", "name", "product name"]
 IMAGE_COLUMN_MAP = {
@@ -40,12 +46,46 @@ IMAGE_FOLDER_NAMES = ["商品主图", "商品详情页图", "商品信息", "颜
 DATA_CODE_ALIASES = ["资料编码", "商品编码", "编码", "款号", "货号", "code"]
 
 
-app = FastAPI(title="Excel Splitter MVP")
+def _cleanup_expired_jobs() -> None:
+    now = time.time()
+    for path in WORK_DIR.iterdir():
+        if not path.is_dir():
+            continue
+        try:
+            if now - path.stat().st_mtime > TASK_TTL_SECONDS:
+                shutil.rmtree(path)
+        except FileNotFoundError:
+            continue
+
+
+def _cleanup_loop(stop_event: threading.Event) -> None:
+    while not stop_event.wait(CLEANUP_INTERVAL_SECONDS):
+        _cleanup_expired_jobs()
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    _cleanup_expired_jobs()
+    stop_event = threading.Event()
+    worker = threading.Thread(target=_cleanup_loop, args=(stop_event,), daemon=True)
+    worker.start()
+    try:
+        yield
+    finally:
+        stop_event.set()
+        worker.join(timeout=1)
+
+
+app = FastAPI(title="Excel Splitter MVP", lifespan=lifespan)
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> dict[str, str | int]:
+    return {
+        "status": "ok",
+        "task_ttl_seconds": TASK_TTL_SECONDS,
+        "cleanup_interval_seconds": CLEANUP_INTERVAL_SECONDS,
+    }
 
 
 def _clean_filename(value: str) -> str:
@@ -226,7 +266,6 @@ async def preview(excel: Annotated[UploadFile, File()]) -> dict:
 @app.post("/api/generate")
 async def generate(
     excel: Annotated[UploadFile, File()],
-    images_zip: Annotated[UploadFile | None, File()] = None,
     options: Annotated[str, Form()] = "{}",
 ) -> FileResponse:
     if not excel.filename.lower().endswith(".xlsx"):
@@ -248,8 +287,6 @@ async def generate(
     if not grouped:
         raise HTTPException(status_code=400, detail="没有可生成的商品数据")
 
-    image_index = _extract_images(images_zip, source_dir)
-    image_columns = _image_columns(headers)
     copied_images = 0
     for index, (product_name, product_rows) in enumerate(grouped.items(), start=1):
         product_dir = output_dir / _clean_filename(product_name)
@@ -258,7 +295,6 @@ async def generate(
             (product_dir / folder_name).mkdir(exist_ok=True)
         data_code = _data_code(headers, product_rows, index)
         write_xlsx(product_dir / f"商品数据-{data_code}.xlsx", headers, product_rows)
-        copied_images += _copy_images(product_rows, image_columns, image_index, product_dir)
 
     manifest = {
         "source_excel": excel.filename,

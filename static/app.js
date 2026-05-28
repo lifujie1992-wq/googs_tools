@@ -1,6 +1,5 @@
 const state = {
   excelFile: null,
-  zipFile: null,
   preview: null,
   downloadUrl: null,
 };
@@ -8,7 +7,6 @@ const state = {
 const $ = (id) => document.getElementById(id);
 
 const excelInput = $("excelInput");
-const zipInput = $("zipInput");
 const excelDrop = $("excelDrop");
 const generateButton = $("generateButton");
 const downloadButton = $("downloadButton");
@@ -134,7 +132,6 @@ async function generateZip() {
 
   const formData = new FormData();
   formData.append("excel", state.excelFile);
-  if (state.zipFile) formData.append("images_zip", state.zipFile);
   formData.append("options", JSON.stringify({ preserveHeaders: true }));
 
   try {
@@ -329,11 +326,6 @@ function crc32(data) {
 }
 
 excelInput.addEventListener("change", () => parseExcel(excelInput.files[0]));
-zipInput.addEventListener("change", () => {
-  state.zipFile = zipInput.files[0] || null;
-  $("zipName").textContent = state.zipFile ? state.zipFile.name : "把主图、详情图、颜色图等图片压缩成 ZIP 后上传";
-});
-
 ["dragenter", "dragover"].forEach((eventName) => {
   excelDrop.addEventListener(eventName, (event) => {
     event.preventDefault();
@@ -365,5 +357,5 @@ $("resetButton").addEventListener("click", resetAll);
 $("closeDialog").addEventListener("click", () => previewDialog.close());
 $("sampleButton").addEventListener("click", downloadSampleXlsx);
 $("helpButton").addEventListener("click", () => {
-  alert("先上传包含“商品名称”列的 .xlsx 文件。系统会按商品名称分组预览，确认后生成每个商品独立文件夹和商品数据.xlsx。图片 ZIP 为可选，图片文件名需和 Excel 中填写的一致。");
+  alert("先上传包含“商品名称”列的 .xlsx 文件。系统会按商品名称分组预览，确认后生成每个商品独立文件夹、商品数据-资料编码.xlsx 和四个空图片文件夹。");
 });

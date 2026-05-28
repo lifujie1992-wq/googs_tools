@@ -5,6 +5,9 @@ services:
     restart: unless-stopped
     ports:
       - "8123:8123"
+    environment:
+      TASK_TTL_SECONDS: "7200"
+      CLEANUP_INTERVAL_SECONDS: "600"
     volumes:
       - excel-splitter-work:/app/work
 

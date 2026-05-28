@@ -104,6 +104,18 @@ cd /opt/excel-splitter
 sudo ./deploy/update-ubuntu.sh
 ```
 
+## 临时文件清理
+
+服务器会把上传文件和生成结果临时放在 `/app/work`，默认保留 2 小时后自动删除，每 10 分钟清理一次，避免磁盘被占满。
+
+如需调整保留时间，修改 `docker-compose.yml`：
+
+```yaml
+environment:
+  TASK_TTL_SECONDS: "7200"
+  CLEANUP_INTERVAL_SECONDS: "600"
+```
+
 ## 输出数据包格式
 
 生成的 ZIP 会按商品名称建父文件夹，Excel 文件名使用资料编码：
