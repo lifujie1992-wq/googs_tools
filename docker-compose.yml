@@ -1,0 +1,12 @@
+services:
+  excel-splitter:
+    build: .
+    container_name: excel-splitter
+    restart: unless-stopped
+    ports:
+      - "8123:8123"
+    volumes:
+      - excel-splitter-work:/app/work
+
+volumes:
+  excel-splitter-work:

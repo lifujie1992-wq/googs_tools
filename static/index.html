@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Excel 拆分生成数据包</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="topbar">
+        <div>
+          <h1>Excel 拆分生成数据包</h1>
+          <p>上传填写好的 Excel，系统将按“商品名称”自动拆分，生成标准文件夹并打包下载</p>
+        </div>
+        <button class="help-button" type="button" id="helpButton">使用说明</button>
+      </header>
+
+      <section class="steps" aria-label="处理步骤">
+        <div class="step active">
+          <span>1</span>
+          <div>
+            <strong>上传Excel</strong>
+            <small>上传填写好的文件</small>
+          </div>
+        </div>
+        <div class="line"></div>
+        <div class="step" id="stepPreview">
+          <span>2</span>
+          <div>
+            <strong>解析预览</strong>
+            <small>系统解析并预览拆分结果</small>
+          </div>
+        </div>
+        <div class="line"></div>
+        <div class="step" id="stepDownload">
+          <span>3</span>
+          <div>
+            <strong>生成下载</strong>
+            <small>生成文件夹并打包下载</small>
+          </div>
+        </div>
+      </section>
+
+      <section class="layout">
+        <article class="panel">
+          <div class="panel-title">
+            <span>1</span>
+            <h2>上传填写好的 Excel 文件</h2>
+          </div>
+
+          <label class="dropzone" for="excelInput" id="excelDrop">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <path d="M14 2v6h6"></path>
+              <path d="M8 13h8"></path>
+              <path d="M8 17h8"></path>
+            </svg>
+            <strong id="excelName">点击或拖拽 Excel 文件到此处上传</strong>
+            <small>支持 .xlsx 格式，建议文件小于 50MB</small>
+            <span class="primary-button">选择文件</span>
+          </label>
+          <input id="excelInput" type="file" accept=".xlsx" hidden />
+
+          <label class="file-line" for="zipInput">
+            <div>
+              <strong>图片 ZIP（可选）</strong>
+              <small id="zipName">把主图、详情图、颜色图等图片压缩成 ZIP 后上传</small>
+            </div>
+            <span>选择图片包</span>
+          </label>
+          <input id="zipInput" type="file" accept=".zip" hidden />
+
+          <div class="requirements">
+            <h3>上传要求</h3>
+            <ul>
+              <li>第一行必须是表头，且包含“商品名称”列</li>
+              <li>同一商品的多行数据会自动合并到同一个商品文件夹</li>
+              <li>图片列支持：主图、详情图、商品信息图、颜色图</li>
+              <li>图片单元格可填写多个文件名，用逗号或分号分隔</li>
+            </ul>
+          </div>
+
+          <div class="fields">
+            <h3>推荐字段</h3>
+            <div class="chips">
+              <span>商品名称 *</span>
+              <span>商品编码</span>
+              <span>SKU编码</span>
+              <span>规格1</span>
+              <span>规格值1</span>
+              <span>价格</span>
+              <span>库存</span>
+              <span>主图</span>
+              <span>详情图</span>
+              <span>颜色图</span>
+            </div>
+          </div>
+
+          <button class="secondary-button ghost" type="button" id="sampleButton">下载示例 Excel</button>
+        </article>
+
+        <article class="panel">
+          <div class="panel-title">
+            <span>2</span>
+            <h2>解析预览结果</h2>
+          </div>
+
+          <div class="upload-card" id="fileCard">
+            <div class="file-icon">X</div>
+            <div>
+              <strong id="currentFileName">尚未上传 Excel</strong>
+              <small id="currentFileMeta">上传后会在这里显示解析状态</small>
+            </div>
+            <span class="status idle" id="parseStatus">等待上传</span>
+          </div>
+
+          <div class="stats">
+            <div>
+              <strong id="productCount">0</strong>
+              <small>识别到商品数</small>
+            </div>
+            <div>
+              <strong id="skuRows">0</strong>
+              <small>总行数（SKU数据）</small>
+            </div>
+            <div>
+              <strong id="errorRows">0</strong>
+              <small>错误行数</small>
+            </div>
+            <div>
+              <strong id="folderCount">0</strong>
+              <small>将生成文件夹数</small>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <div class="table-title">按商品名称拆分预览</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>序号</th>
+                  <th>商品名称</th>
+                  <th>行数（SKU数量）</th>
+                  <th>预览</th>
+                </tr>
+              </thead>
+              <tbody id="previewRows">
+                <tr>
+                  <td colspan="4" class="empty">上传 Excel 后显示预览结果</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="notice">
+            <strong>提示</strong>
+            <p>请先确认预览结果无误，再开始生成。生成后每个商品会拥有独立的 Excel 文件和图片目录。</p>
+          </div>
+
+          <div class="actions">
+            <button class="secondary-button" type="button" id="resetButton">重新上传</button>
+            <button class="primary-action" type="button" id="generateButton" disabled>确认无误，开始生成</button>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-title">
+            <span>3</span>
+            <h2>生成数据包并下载</h2>
+          </div>
+
+          <div class="download-box" id="downloadBox">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <path d="M7 10l5 5 5-5"></path>
+              <path d="M12 15V3"></path>
+            </svg>
+            <strong id="downloadTitle">等待生成数据包</strong>
+            <small id="downloadMeta">解析成功后可生成 ZIP 文件</small>
+            <button class="download-button" type="button" id="downloadButton" disabled>下载总数据包（ZIP）</button>
+          </div>
+
+          <div class="tree">
+            <h3>生成的文件夹结构</h3>
+            <ul>
+              <li>商品A/</li>
+              <li class="child">商品数据.xlsx</li>
+              <li class="child">商品主图/</li>
+              <li class="child">商品详情页图/</li>
+              <li class="child">商品信息/</li>
+              <li class="child">颜色图/</li>
+              <li>商品B/</li>
+              <li>商品C/</li>
+            </ul>
+          </div>
+
+          <div class="warm">
+            <strong>温馨提示</strong>
+            <ol>
+              <li>图片文件名需要和 Excel 单元格中的文件名一致</li>
+              <li>没有匹配到的图片不会影响 Excel 拆分</li>
+              <li>压缩包内的文件夹结构会自动创建</li>
+            </ol>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <dialog id="previewDialog">
+      <div class="dialog-head">
+        <strong id="dialogTitle">商品预览</strong>
+        <button type="button" id="closeDialog">关闭</button>
+      </div>
+      <pre id="dialogBody"></pre>
+    </dialog>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
