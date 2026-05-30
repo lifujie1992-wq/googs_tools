@@ -8,6 +8,8 @@ from typing import Iterable
 from xml.etree import ElementTree as ET
 
 
+MergeRange = tuple[int, int, int, int]
+
 XML_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 PKG_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
@@ -106,9 +108,15 @@ def read_xlsx(path: Path) -> list[list[str]]:
     return rows
 
 
-def write_xlsx(path: Path, header_rows: list[list[str]], rows: Iterable[list[str]]) -> None:
+def write_xlsx(
+    path: Path,
+    header_rows: list[list[str]],
+    rows: Iterable[list[str]],
+    merge_header_groups: bool = False,
+) -> None:
     row_list = list(rows)
-    sheet_xml = _build_sheet_xml([*header_rows, *row_list])
+    merge_ranges = _header_group_merge_ranges(header_rows) if merge_header_groups else []
+    sheet_xml = _build_sheet_xml([*header_rows, *row_list], merge_ranges)
 
     files = {
         "[Content_Types].xml": _content_types_xml(),
@@ -129,7 +137,47 @@ def _cell_xml(value: str, row_number: int, col_index: int) -> str:
     return f'<c r="{ref}" t="inlineStr"><is><t>{escaped}</t></is></c>'
 
 
-def _build_sheet_xml(rows: list[list[str]]) -> str:
+def _header_group_merge_ranges(header_rows: list[list[str]]) -> list[MergeRange]:
+    if len(header_rows) < 2:
+        return []
+    group_row = header_rows[0]
+    header_width = max(len(header_rows[0]), len(header_rows[1]))
+    ranges: list[MergeRange] = []
+    col_index = 0
+    while col_index < header_width:
+        title = group_row[col_index].strip() if col_index < len(group_row) else ""
+        if not title:
+            col_index += 1
+            continue
+        end_index = col_index
+        next_index = col_index + 1
+        while next_index < header_width:
+            next_title = group_row[next_index].strip() if next_index < len(group_row) else ""
+            if next_title:
+                break
+            end_index = next_index
+            next_index += 1
+        if end_index > col_index:
+            ranges.append((1, col_index, 1, end_index))
+        col_index = end_index + 1
+    return ranges
+
+
+def _merge_ref(start_row: int, start_col: int, end_row: int, end_col: int) -> str:
+    return f"{_column_name(start_col)}{start_row}:{_column_name(end_col)}{end_row}"
+
+
+def _merge_cells_xml(merge_ranges: list[MergeRange]) -> str:
+    if not merge_ranges:
+        return ""
+    cells = "".join(
+        f'<mergeCell ref="{_merge_ref(start_row, start_col, end_row, end_col)}"/>'
+        for start_row, start_col, end_row, end_col in merge_ranges
+    )
+    return f'<mergeCells count="{len(merge_ranges)}">{cells}</mergeCells>'
+
+
+def _build_sheet_xml(rows: list[list[str]], merge_ranges: list[MergeRange] | None = None) -> str:
     max_columns = max((len(row) for row in rows), default=1)
     last_ref = f"{_column_name(max_columns - 1)}{max(len(rows), 1)}"
     rendered_rows: list[str] = []
@@ -137,6 +185,7 @@ def _build_sheet_xml(rows: list[list[str]]) -> str:
         cells = "".join(_cell_xml(value, row_index, col_index) for col_index, value in enumerate(row))
         rendered_rows.append(f'<row r="{row_index}">{cells}</row>')
     sheet_data = "".join(rendered_rows)
+    merge_cells = _merge_cells_xml(merge_ranges or [])
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         f'<worksheet xmlns="{XML_NS}" xmlns:r="{REL_NS}">'
@@ -144,6 +193,7 @@ def _build_sheet_xml(rows: list[list[str]]) -> str:
         "<sheetViews><sheetView workbookViewId=\"0\"/></sheetViews>"
         "<sheetFormatPr defaultRowHeight=\"18\"/>"
         f"<sheetData>{sheet_data}</sheetData>"
+        f"{merge_cells}"
         "</worksheet>"
     )
 

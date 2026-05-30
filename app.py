@@ -299,7 +299,12 @@ async def generate(
         for folder_name in IMAGE_FOLDER_NAMES:
             (product_dir / folder_name).mkdir(exist_ok=True)
         data_code = _data_code(headers, product_rows, index)
-        write_xlsx(product_dir / f"商品数据-{data_code}.xlsx", header_rows, product_rows)
+        write_xlsx(
+            product_dir / f"商品数据-{data_code}.xlsx",
+            header_rows,
+            product_rows,
+            merge_header_groups=True,
+        )
 
     manifest = {
         "source_excel": excel.filename,
