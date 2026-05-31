@@ -18,7 +18,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from xlsx_tools import read_xlsx, write_xlsx
+from xlsx_tools import MergeRange, read_xlsx_with_merges, write_xlsx
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -95,20 +95,53 @@ def _clean_filename(value: str) -> str:
     return value[:80] or "未命名商品"
 
 
-def _parse_workbook(file_path: Path) -> tuple[list[list[str]], list[str], list[list[str]]]:
+def _header_merge_ranges(merge_ranges: list[MergeRange]) -> list[MergeRange]:
+    return [
+        merge_range
+        for merge_range in merge_ranges
+        if 1 <= merge_range[0] <= HEADER_ROW_COUNT and merge_range[2] <= HEADER_ROW_COUNT
+    ]
+
+
+def _expand_merged_header_values(
+    header_rows: list[list[str]],
+    merge_ranges: list[MergeRange],
+) -> list[list[str]]:
+    width = max(
+        max((len(row) for row in header_rows), default=0),
+        max((end_col + 1 for _, _, _, end_col in merge_ranges), default=0),
+    )
+    expanded = [row + [""] * (width - len(row)) for row in header_rows]
+    for start_row, start_col, end_row, end_col in merge_ranges:
+        source_row = start_row - 1
+        if source_row >= len(expanded) or start_col >= len(expanded[source_row]):
+            continue
+        value = expanded[source_row][start_col].strip()
+        if not value:
+            continue
+        for row_index in range(start_row - 1, min(end_row, len(expanded))):
+            for col_index in range(start_col, end_col + 1):
+                if not expanded[row_index][col_index].strip():
+                    expanded[row_index][col_index] = value
+    return expanded
+
+
+def _parse_workbook(file_path: Path) -> tuple[list[list[str]], list[str], list[list[str]], list[MergeRange]]:
     try:
-        rows = read_xlsx(file_path)
+        rows, merge_ranges = read_xlsx_with_merges(file_path)
     except Exception as exc:  # pragma: no cover - surfaced as API error
         raise HTTPException(status_code=400, detail=f"Excel 解析失败：{exc}") from exc
 
     if len(rows) < HEADER_ROW_COUNT:
         raise HTTPException(status_code=400, detail="Excel 内容为空")
     header_rows = [[str(item).strip() for item in row] for row in rows[:HEADER_ROW_COUNT]]
-    headers = header_rows[-1]
+    header_merges = _header_merge_ranges(merge_ranges)
+    logical_header_rows = _expand_merged_header_values(header_rows, header_merges)
+    headers = logical_header_rows[-1]
     body = rows[HEADER_ROW_COUNT:]
     if not all(any(row) for row in header_rows):
         raise HTTPException(status_code=400, detail="前两行需要是表头")
-    return header_rows, headers, body
+    return header_rows, headers, body, header_merges
 
 
 def _find_product_column(headers: list[str]) -> int:
@@ -264,7 +297,7 @@ async def preview(excel: Annotated[UploadFile, File()]) -> dict:
         excel_path = temp_dir / "upload.xlsx"
         with excel_path.open("wb") as output:
             shutil.copyfileobj(excel.file, output)
-        _, headers, rows = _parse_workbook(excel_path)
+        _, headers, rows, _ = _parse_workbook(excel_path)
         return _preview_payload(headers, rows)
 
 
@@ -287,7 +320,7 @@ async def generate(
     with excel_path.open("wb") as output:
         shutil.copyfileobj(excel.file, output)
 
-    header_rows, headers, rows = _parse_workbook(excel_path)
+    header_rows, headers, rows, header_merges = _parse_workbook(excel_path)
     grouped = _group_rows(headers, rows)
     if not grouped:
         raise HTTPException(status_code=400, detail="没有可生成的商品数据")
@@ -304,6 +337,7 @@ async def generate(
             header_rows,
             product_rows,
             merge_header_groups=True,
+            merge_ranges=header_merges,
         )
 
     manifest = {
