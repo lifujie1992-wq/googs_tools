@@ -49,7 +49,7 @@
             <h2>上传填写好的 Excel 文件</h2>
           </div>
 
-          <label class="dropzone" for="excelInput" id="excelDrop">
+          <div class="dropzone" id="excelDrop" role="button" tabindex="0">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
               <path d="M14 2v6h6"></path>
@@ -58,9 +58,9 @@
             </svg>
             <strong id="excelName">点击或拖拽 Excel 文件到此处上传</strong>
             <small>支持 .xlsx 格式，建议文件小于 50MB</small>
-            <span class="primary-button">选择文件</span>
-          </label>
-          <input id="excelInput" type="file" accept=".xlsx" hidden />
+            <button class="primary-button" type="button" id="excelPickButton">选择文件</button>
+          </div>
+          <input id="excelInput" type="file" accept=".xlsx" class="file-input" />
 
           <div class="requirements">
             <h3>上传要求</h3>

@@ -170,7 +170,16 @@ button:disabled {
   border-radius: 8px;
   background: #fbfdff;
   text-align: center;
+  cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.file-input {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .dropzone.dragging {

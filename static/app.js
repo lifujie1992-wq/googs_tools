@@ -8,6 +8,7 @@ const $ = (id) => document.getElementById(id);
 
 const excelInput = $("excelInput");
 const excelDrop = $("excelDrop");
+const excelPickButton = $("excelPickButton");
 const generateButton = $("generateButton");
 const downloadButton = $("downloadButton");
 const previewRows = $("previewRows");
@@ -206,7 +207,21 @@ function downloadSampleXlsx() {
   link.click();
 }
 
+function openExcelPicker() {
+  excelInput.click();
+}
+
 excelInput.addEventListener("change", () => parseExcel(excelInput.files[0]));
+excelDrop.addEventListener("click", openExcelPicker);
+excelDrop.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  openExcelPicker();
+});
+excelPickButton.addEventListener("click", (event) => {
+  event.stopPropagation();
+  openExcelPicker();
+});
 ["dragenter", "dragover"].forEach((eventName) => {
   excelDrop.addEventListener(eventName, (event) => {
     event.preventDefault();
